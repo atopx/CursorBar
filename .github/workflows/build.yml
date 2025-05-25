@@ -20,6 +20,12 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
           components: rustfmt, clippy
 
+      - name: 设置Rust缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "macos-build"
+          cache-on-failure: true
+
       - name: 构建macOS (x86_64)
         run: |
           cargo build --release --target x86_64-apple-darwin
@@ -145,8 +151,15 @@ jobs:
 
       - name: 安装依赖
         run: |
+          cargo install cargo-wix
           choco install -y upx
           choco install -y wixtoolset
+      
+      - name: 设置Rust缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "windows-build"
+          cache-on-failure: true
 
       - name: 构建Windows
         run: |
@@ -209,6 +222,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: 设置Rust缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "linux-build"
+          cache-on-failure: true
 
       - name: 构建Linux
         run: |

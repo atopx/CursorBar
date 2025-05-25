@@ -58,7 +58,6 @@ long_description = """
 
 [package.metadata.wix]
 name = "CursorBar"
-license = true
 manufacturer = "atopx"
 product-name = "CursorBar"
 product-icon = "icon/windows/icon.ico"
