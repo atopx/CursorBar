@@ -35,6 +35,7 @@ jobs:
           mkdir -p "$APP_NAME/Contents/MacOS"
           mkdir -p "$APP_NAME/Contents/Resources"
           cp target/x86_64-apple-darwin/release/cursor_bar "$APP_NAME/Contents/MacOS/"
+          cp icon/macos/icon.icns "$APP_NAME/Contents/Resources/AppIcon.icns"
 
           # 创建Info.plist
           cat > "$APP_NAME/Contents/Info.plist" << EOF
@@ -48,6 +49,8 @@ jobs:
               <string>com.atopx.cursorbar</string>
               <key>CFBundleName</key>
               <string>CursorBar</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon.icns</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
               <key>LSUIElement</key>
@@ -70,6 +73,7 @@ jobs:
           mkdir -p "$APP_NAME/Contents/MacOS"
           mkdir -p "$APP_NAME/Contents/Resources"
           cp target/aarch64-apple-darwin/release/cursor_bar "$APP_NAME/Contents/MacOS/"
+          cp icon/macos/icon.icns "$APP_NAME/Contents/Resources/AppIcon.icns"
 
           # 创建Info.plist
           cat > "$APP_NAME/Contents/Info.plist" << EOF
@@ -83,6 +87,8 @@ jobs:
               <string>com.atopx.cursorbar</string>
               <key>CFBundleName</key>
               <string>CursorBar</string>
+              <key>CFBundleIconFile</key>
+              <string>AppIcon.icns</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
               <key>LSUIElement</key>
@@ -107,13 +113,13 @@ jobs:
           mkdir -p dmg-temp-x86_64
           cp -R "CursorBar-x86_64.app" dmg-temp-x86_64/
           ln -s /Applications dmg-temp-x86_64/Applications
-          hdiutil create -volname "CursorBar x86_64" -srcfolder dmg-temp-x86_64 -ov -format UDZO "CursorBarWatch-macos-x86_64.dmg"
+          hdiutil create -volname "CursorBar x86_64" -srcfolder dmg-temp-x86_64 -ov -format UDZO "CursorBar-macos-x86_64.dmg"
 
           # arm64
           mkdir -p dmg-temp-arm64
           cp -R "CursorBar-arm64.app" dmg-temp-arm64/
           ln -s /Applications dmg-temp-arm64/Applications
-          hdiutil create -volname "CursorBar arm64" -srcfolder dmg-temp-arm64 -ov -format UDZO "CursorBarWatch-macos-arm64.dmg"
+          hdiutil create -volname "CursorBar arm64" -srcfolder dmg-temp-arm64 -ov -format UDZO "CursorBar-macos-arm64.dmg"
 
       - name: 上传构建产物
         if: startsWith(github.ref, 'refs/tags/')
@@ -121,8 +127,8 @@ jobs:
         with:
           name: macos-builds
           path: |
-            CursorBarWatch-macos-x86_64.dmg
-            CursorBarWatch-macos-arm64.dmg
+            CursorBar-macos-x86_64.dmg
+            CursorBar-macos-arm64.dmg
 
   # Windows 构建
   build-windows:
@@ -155,68 +161,40 @@ jobs:
             exit 1
           }
 
-      - name: 创建安装包
+      - name: 安装cargo-wix
+        run: cargo install cargo-wix
+      
+      - name: 创建Windows安装包
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          # 创建简单压缩包
-          mkdir -p CursorBarWatch-windows
-          copy target\release\cursor_bar.exe CursorBarWatch-windows\
-
-          # 创建WiX安装包
           $VERSION_NUM = $env:GITHUB_REF.Replace('refs/tags/v', '')
+          
+          # 初始化 WiX 配置文件
+          cargo wix init
 
-          @"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="CursorBar" Language="1033" Version="$VERSION_NUM.0" Manufacturer="atopx" UpgradeCode="12345678-1234-1234-1234-123456789012">
-              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+          # 替换 wix\main.wxs 文件中的版本号和图标
+          (Get-Content wix\main.wxs) -replace '1.0.0', $VERSION_NUM | Set-Content wix\main.wxs
+          
+          # 复制图标到wix目录
+          copy icon\windows\icon.ico wix\
 
-              <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-              <MediaTemplate EmbedCab="yes" />
-
-              <Feature Id="ProductFeature" Title="CursorBar" Level="1">
-                <ComponentGroupRef Id="ProductComponents" />
-              </Feature>
-
-              <Directory Id="TARGETDIR" Name="SourceDir">
-                <Directory Id="ProgramFilesFolder">
-                  <Directory Id="INSTALLFOLDER" Name="CursorBar" />
-                </Directory>
-                <Directory Id="ProgramMenuFolder">
-                  <Directory Id="ApplicationProgramsFolder" Name="CursorBar"/>
-                </Directory>
-                <Directory Id="StartupFolder" />
-              </Directory>
-
-              <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-                <Component Id="MainExecutable" Guid="*">
-                  <File Id="CursorBarExe" Source="target\release\cursor_bar.exe" KeyPath="yes">
-                    <Shortcut Id="ApplicationStartMenuShortcut" Directory="ApplicationProgramsFolder" Name="CursorBar" WorkingDirectory="INSTALLFOLDER" Icon="CursorBar.exe" IconIndex="0" Advertise="yes" />
-                    <Shortcut Id="ApplicationStartupShortcut" Directory="StartupFolder" Name="CursorBar" WorkingDirectory="INSTALLFOLDER" Arguments="" />
-                  </File>
-                </Component>
-              </ComponentGroup>
-
-              <Icon Id="CursorBar.exe" SourceFile="target\release\cursor_bar.exe" />
-              <Property Id="ARPPRODUCTICON" Value="CursorBar.exe" />
-              <Property Id="ARPURLINFOABOUT" Value="https://github.com/atopx/CursorBarWatch" />
-            </Product>
-          </Wix>
-          "@ | Out-File -Encoding utf8 installer.wxs
-
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" installer.wxs
-          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" installer.wixobj -out "CursorBarWatch-windows.msi"
-
-          Compress-Archive -Path CursorBarWatch-windows\* -DestinationPath CursorBarWatch-windows.zip
-
+          # 构建 MSI 安装包
+          cargo wix --output target\wix\CursorBar-windows.msi
+          
+          # 创建便携版
+          mkdir -p release-win
+          copy target\release\cursor_bar.exe release-win\cursor_bar.exe
+          copy icon\windows\icon.ico release-win\icon.ico
+          Compress-Archive -Path release-win\* -DestinationPath CursorBar-windows.zip
+      
       - name: 上传构建产物
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
           path: |
-            CursorBarWatch-windows.zip
-            CursorBarWatch-windows.msi
+            CursorBar-windows.zip
+            CursorBar-windows.msi
 
   # Linux 构建
   build-linux:
@@ -253,38 +231,48 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION="${{ github.ref_name }}"
-          PACKAGE_NAME="cursorbarwatch_${VERSION}_amd64"
+          VERSION_NUM="${VERSION#v}"
+          PACKAGE_NAME="cursorbarwatch_${VERSION_NUM}_amd64"
 
           # 创建包结构
           mkdir -p "$PACKAGE_NAME/DEBIAN"
           mkdir -p "$PACKAGE_NAME/usr/bin"
           mkdir -p "$PACKAGE_NAME/usr/share/applications"
+          mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps"
+          mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps"
+          mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps"
+          mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps"
           mkdir -p "$PACKAGE_NAME/usr/share/doc/cursorbarwatch"
 
-          # 复制二进制文件
+          # 复制二进制文件和图标
           cp target/release/cursor_bar "$PACKAGE_NAME/usr/bin/"
+          cp icon/linux/256x256.png "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbarwatch.png"
+          cp icon/linux/128x128.png "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbarwatch.png"
+          cp icon/linux/64x64.png "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbarwatch.png"
+          cp icon/linux/32x32.png "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbarwatch.png"
 
           # 创建控制文件
           cat > "$PACKAGE_NAME/DEBIAN/control" << EOF
           Package: cursorbarwatch
-          Version: ${VERSION#v}
+          Version: ${VERSION_NUM}
           Section: utils
           Priority: optional
           Architecture: amd64
           Depends: libgtk-3-0, libwebkit2gtk-4.0-37, libappindicator3-1, libc6, libxdo3, xdotool
           Maintainer: atopx <atopx@example.com>
-          Homepage: https://github.com/atopx/CursorBarWatch
+          Homepage: https://github.com/atopx/CursorBar
           Description: Real-time Cursor AI usage monitoring
            A modern, cross-platform system tray application for monitoring
            Cursor AI usage metrics in real-time.
           EOF
 
           # 创建desktop文件
-          cat > "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" << EOF
+          cat > "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" << EOF
           [Desktop Entry]
           Name=CursorBar
           Comment=Cursor AI usage monitoring
           Exec=/usr/bin/cursor_bar
+          Icon=cursorbarwatch
           Terminal=false
           Type=Application
           Categories=Utility;System;Monitor;
@@ -296,7 +284,11 @@ jobs:
 
           # 设置权限
           chmod 755 "$PACKAGE_NAME/usr/bin/cursor_bar"
-          chmod 644 "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop"
+          chmod 644 "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbarwatch.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbarwatch.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbarwatch.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbarwatch.png"
 
           # 构建DEB包
           fakeroot dpkg-deb --build "$PACKAGE_NAME"
@@ -307,8 +299,8 @@ jobs:
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
           cp target/release/cursor_bar AppDir/usr/bin/
-          cp "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" AppDir/
-          cp "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" AppDir/usr/share/applications/
+          cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/
+          cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/usr/share/applications/
 
           # 创建AppRun文件
           cat > AppDir/AppRun << EOF
@@ -324,7 +316,7 @@ jobs:
           chmod +x appimagetool-x86_64.AppImage
 
           # 创建AppImage
-          ./appimagetool-x86_64.AppImage AppDir CursorBarWatch-linux.AppImage
+          ./appimagetool-x86_64.AppImage AppDir CursorBar-linux.AppImage
 
       - name: 上传构建产物
         if: startsWith(github.ref, 'refs/tags/')
@@ -332,8 +324,8 @@ jobs:
         with:
           name: linux-builds
           path: |
-            CursorBarWatch-linux.AppImage
-            cursorbarwatch_*.deb
+            CursorBar-linux.AppImage
+            CursorBar_*.deb
 
   # 创建发布版本
   create-release:
@@ -348,11 +340,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            macos-builds/CursorBarWatch-macos-x86_64.dmg
-            macos-builds/CursorBarWatch-macos-arm64.dmg
-            windows-builds/CursorBarWatch-windows.zip
-            windows-builds/CursorBarWatch-windows.msi
-            linux-builds/CursorBarWatch-linux.AppImage
+            macos-builds/CursorBar-macos-x86_64.dmg
+            macos-builds/CursorBar-macos-arm64.dmg
+            windows-builds/CursorBar-windows.zip
+            windows-builds/CursorBar-windows.msi
+            linux-builds/CursorBar-linux.AppImage
             linux-builds/*.deb
           draft: false
           generate_release_notes: true
