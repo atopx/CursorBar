@@ -9,7 +9,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 chrono = "0.4"
-rusqlite = "0.28"
+rusqlite = "0.35"
 base64 = "0.13"
 dirs = "6.0"
 open = "5.3.2"
