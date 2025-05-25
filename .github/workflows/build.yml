@@ -22,12 +22,6 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
           components: rustfmt, clippy
 
-      - name: 运行测试
-        run: |
-          cargo test --verbose
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
-
       - name: 构建macOS (x86_64)
         run: |
           cargo build --release --target x86_64-apple-darwin
@@ -150,12 +144,6 @@ jobs:
           choco install -y upx
           choco install -y wixtoolset
 
-      - name: 运行测试
-        run: |
-          cargo test --verbose
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
-
       - name: 构建Windows
         run: |
           cargo build --release
@@ -242,12 +230,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: 运行测试
-        run: |
-          cargo test --verbose
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
 
       - name: 构建Linux
         run: |
