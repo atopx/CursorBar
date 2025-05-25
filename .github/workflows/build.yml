@@ -298,7 +298,8 @@ jobs:
           cp target/release/cursor_bar AppDir/usr/bin/
           cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/
           cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/usr/share/applications/
-          cp "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbar.png" AppDir/usr/share/icons/hicolor/256x256/apps/cursorbar.png
+          cp icon/linux/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/cursorbar.png
+          cp icon/linux/256x256.png AppDir/cursorbar.png
 
           # 创建AppRun文件
           cat > AppDir/AppRun << EOF
