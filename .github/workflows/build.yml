@@ -167,8 +167,6 @@ jobs:
       - name: 创建Windows安装包
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          $VERSION_NUM = "${{ github.ref_name }}".Replace('v', '')
-          
           # 初始化 WiX 配置文件
           cargo wix init
 
@@ -183,7 +181,7 @@ jobs:
           copy target\release\cursor_bar.exe release-win\cursor_bar.exe
           copy icon\windows\icon.ico release-win\icon.ico
           Compress-Archive -Path release-win\* -DestinationPath CursorBar-windows.zip
-      
+
       - name: 上传构建产物
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
