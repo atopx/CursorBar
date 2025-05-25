@@ -23,16 +23,16 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: cursor_bar-macos-x86_64
+            name: cursor_bar-macos-x86_64.dmg
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: cursor_bar-macos-aarch64
+            name: cursor_bar-macos-aarch64.dmg
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: cursor_bar-windows-x86_64.exe
+            name: cursor_bar-windows-x86_64.msi
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: cursor_bar-linux-x86_64
+            os: ubuntu-22.04
+            name: cursor_bar-linux-x86_64.deb
 
     steps:
     - name: Checkout code
@@ -44,10 +44,31 @@ jobs:
         targets: ${{ matrix.target }}
 
     - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-22.04'
       run: |
         sudo apt-get update
         sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+        sudo apt-get install -y dpkg-dev fakeroot
+
+    - name: Install UPX (Ubuntu)
+      if: matrix.os == 'ubuntu-22.04'
+      run: |
+        sudo apt-get install -y upx-ucl
+
+    - name: Install UPX (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install upx
+
+    - name: Install UPX (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install upx
+
+    - name: Install packaging tools (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install wixtoolset
 
     - name: Cache cargo registry
       uses: actions/cache@v4
@@ -63,30 +84,41 @@ jobs:
     - name: Build
       run: cargo build --release --target ${{ matrix.target }}
 
-    - name: Prepare artifact (Unix)
+    - name: Compress binary with UPX (Unix)
       if: matrix.os != 'windows-latest'
       run: |
-        mkdir -p artifacts
-        cp target/${{ matrix.target }}/release/cursor_bar artifacts/${{ matrix.name }}
-        chmod +x artifacts/${{ matrix.name }}
+        upx --best --lzma target/${{ matrix.target }}/release/cursor_bar
 
-    - name: Prepare artifact (Windows)
+    - name: Compress binary with UPX (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        mkdir artifacts
-        copy target\${{ matrix.target }}\release\cursor_bar.exe artifacts\${{ matrix.name }}
+        upx --best --lzma target/${{ matrix.target }}/release/cursor_bar.exe
 
-    - name: Upload artifact
+    - name: Make packaging script executable
+      if: matrix.os != 'windows-latest'
+      run: chmod +x scripts/package.sh
+
+    - name: Create package using script
+      shell: bash
+      run: |
+        VERSION="${{ github.ref_name || github.event.inputs.tag }}"
+        ./scripts/package.sh "$VERSION" "${{ matrix.target }}"
+
+    - name: Find and upload package
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.name }}
-        path: artifacts/${{ matrix.name }}
+        name: ${{ matrix.target }}-package
+        path: |
+          *.dmg
+          *.msi
+          *.deb
+          *.zip
         retention-days: 30
 
   create-release:
     name: Create Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     
     steps:
@@ -102,33 +134,30 @@ jobs:
       run: |
         mkdir -p release-assets
         
-        # Create compressed archives for each platform
-        cd artifacts
+        # Copy all package files to release assets
+        find artifacts -name "*.dmg" -exec cp {} release-assets/ \;
+        find artifacts -name "*.msi" -exec cp {} release-assets/ \;
+        find artifacts -name "*.deb" -exec cp {} release-assets/ \;
+        find artifacts -name "*.zip" -exec cp {} release-assets/ \;
         
-        # macOS x86_64
-        if [ -d "cursor_bar-macos-x86_64" ]; then
-          tar -czf ../release-assets/cursor_bar-macos-x86_64.tar.gz -C cursor_bar-macos-x86_64 .
-        fi
+        # Rename files to include version
+        VERSION="${{ github.ref_name || github.event.inputs.tag }}"
+        cd release-assets
         
-        # macOS ARM64
-        if [ -d "cursor_bar-macos-aarch64" ]; then
-          tar -czf ../release-assets/cursor_bar-macos-aarch64.tar.gz -C cursor_bar-macos-aarch64 .
-        fi
+        # Rename files to have consistent naming
+        for file in *; do
+          if [[ "$file" == cursor_bar-* ]]; then
+            continue  # Already has correct prefix
+          fi
+          # Add version if not present
+          if [[ "$file" != *"$VERSION"* ]]; then
+            ext="${file##*.}"
+            base="${file%.*}"
+            mv "$file" "${base}-${VERSION}.${ext}"
+          fi
+        done
         
-        # Windows
-        if [ -d "cursor_bar-windows-x86_64.exe" ]; then
-          cd cursor_bar-windows-x86_64.exe
-          zip ../../release-assets/cursor_bar-windows-x86_64.zip *
-          cd ..
-        fi
-        
-        # Linux
-        if [ -d "cursor_bar-linux-x86_64" ]; then
-          tar -czf ../release-assets/cursor_bar-linux-x86_64.tar.gz -C cursor_bar-linux-x86_64 .
-        fi
-        
-        cd ..
-        ls -la release-assets/
+        ls -la
 
     - name: Get tag name
       id: tag
@@ -161,6 +190,17 @@ jobs:
             - Bilingual interface (English/Chinese)
             - Configurable refresh intervals
             - Performance optimizations
+            - UPX compressed binaries for smaller file size
+
+            ### Installation
+            - **macOS**: Download the .dmg file and drag CursorBar.app to Applications
+            - **Windows**: Download and run the .msi installer
+            - **Linux**: Download the .deb package and install with \`sudo dpkg -i cursor_bar-linux-x86_64-$VERSION.deb\`
+
+            ### System Requirements
+            - **macOS**: 10.14+ (Mojave or later)
+            - **Windows**: Windows 10 or later
+            - **Linux**: Ubuntu 22.04+ or equivalent (with GTK 3.0 support)
 
             For detailed changes, see [CHANGELOG.md](https://github.com/atopx/CursorBar/blob/main/CHANGELOG.md)"
           fi
@@ -190,7 +230,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
     
     steps:
     - name: Checkout code
@@ -200,7 +240,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-22.04'
       run: |
         sudo apt-get update
         sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev

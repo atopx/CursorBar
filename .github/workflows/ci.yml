@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
         rust: [stable, beta]
         exclude:
           # Reduce CI load by testing beta only on Ubuntu
@@ -35,7 +35,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Install dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-22.04'
       run: |
         sudo apt-get update
         sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
@@ -66,7 +66,7 @@ jobs:
 
   security:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
 
   coverage:
     name: Code Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -111,7 +111,7 @@ jobs:
 
   docs:
     name: Documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
