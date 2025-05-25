@@ -187,8 +187,8 @@ jobs:
           copy icon\windows\icon.ico wix\
 
           # 构建 MSI 安装包
-          cargo wix --output target\wix\CursorBar-windows.msi
-          
+          cargo wix --output CursorBar-windows.msi
+
           # 创建便携版
           New-Item -Path release-win -ItemType Directory -Force
           copy target\release\cursor_bar.exe release-win\cursor_bar.exe
