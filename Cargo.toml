@@ -56,12 +56,9 @@ long_description = """
 使用FLTK图形界面，轻量级、高性能。
 """
 
-[package.metadata.bundle.windows]
-icon = ["icon/windows/icon.ico"]
-
 [package.metadata.wix]
 name = "CursorBar"
-license = false
+license = true
 manufacturer = "atopx"
 product-name = "CursorBar"
 product-icon = "icon/windows/icon.ico"
