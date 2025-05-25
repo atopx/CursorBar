@@ -10,6 +10,8 @@
 
 ![截图](./docs/image.png)
 
+![资源占用](docs/process.png)
+
 ## 功能特性
 
 - 🎯 **实时监控**：实时跟踪您的 Cursor AI 使用情况

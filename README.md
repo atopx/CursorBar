@@ -10,6 +10,8 @@ A modern, cross-platform system tray application for monitoring Cursor AI usage 
 
 ![Screenshot](./docs/image.png)
 
+![Resource Usage](docs/process.png)
+
 ## Features
 
 - 🎯 **Real-time Monitoring**: Track your Cursor AI usage with live updates
