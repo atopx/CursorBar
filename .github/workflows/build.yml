@@ -21,6 +21,10 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
           components: rustfmt, clippy
+          
+      - name: 安装依赖
+        run: |
+          brew install sqlite3
 
       - name: 构建macOS (x86_64)
         run: |
@@ -143,11 +147,48 @@ jobs:
         run: |
           choco install -y upx
           choco install -y wixtoolset
+          choco install -y sqlite
+          
+          # 设置 SQLite3 环境变量
+          echo "SQLITE3_LIB_DIR=C:\ProgramData\chocolatey\lib\sqlite\tools" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: 下载 SQLite3
+        run: |
+          # 下载 SQLite 预编译库
+          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-amalgamation-3440200.zip" -OutFile "sqlite3.zip"
+          Expand-Archive -Path "sqlite3.zip" -DestinationPath "sqlite3"
+          
+          # 编译 SQLite3
+          cd sqlite3/sqlite-amalgamation-3440200
+          cl /MD /O2 /c sqlite3.c
+          lib sqlite3.obj /OUT:sqlite3.lib
+          
+          # 复制到适当的位置
+          mkdir -p $env:USERPROFILE\.sqlite3
+          cp sqlite3.lib $env:USERPROFILE\.sqlite3\
+          cp sqlite3.h $env:USERPROFILE\.sqlite3\
+          
+          # 设置环境变量
+          echo "SQLITE3_LIB_DIR=$env:USERPROFILE\.sqlite3" | Out-File -FilePath $env:GITHUB_ENV -Append
+          
+          # 为 Rust 设置链接路径
+          mkdir -p $env:CARGO_HOME
+          echo "[build]`nrustflags = [`"-L`", `"$env:USERPROFILE\.sqlite3`"]" | Out-File -FilePath "$env:CARGO_HOME\config" -Encoding utf8
 
       - name: 构建Windows
         run: |
+          # 设置链接器参数
+          $env:RUSTFLAGS = "-L $env:USERPROFILE\.sqlite3"
+          # 构建
           cargo build --release
-          upx --best --lzma target\release\cursor_bar.exe
+          
+          # 只有成功构建后才运行 UPX
+          if (Test-Path target\release\cursor_bar.exe) {
+            upx --best --lzma target\release\cursor_bar.exe
+          } else {
+            echo "构建失败，无法运行 UPX"
+            exit 1
+          }
 
       - name: 创建安装包
         if: startsWith(github.ref, 'refs/tags/')
@@ -223,8 +264,8 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
-          sudo apt-get install -y dpkg-dev fakeroot upx-ucl
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev \
+            dpkg-dev fakeroot upx-ucl libsqlite3-dev libxdo-dev xdotool
 
       - name: 安装Rust
         uses: dtolnay/rust-toolchain@stable
@@ -234,7 +275,14 @@ jobs:
       - name: 构建Linux
         run: |
           cargo build --release
-          upx --best --lzma target/release/cursor_bar
+          
+          # 只有成功构建后才运行 UPX
+          if [ -f "target/release/cursor_bar" ]; then
+            upx --best --lzma target/release/cursor_bar
+          else
+            echo "构建失败，无法运行 UPX"
+            exit 1
+          fi
 
       - name: 创建Deb包
         if: startsWith(github.ref, 'refs/tags/')
@@ -258,7 +306,7 @@ jobs:
           Section: utils
           Priority: optional
           Architecture: amd64
-          Depends: libgtk-3-0, libwebkit2gtk-4.0-37, libappindicator3-1, libc6
+          Depends: libgtk-3-0, libwebkit2gtk-4.0-37, libappindicator3-1, libc6, libsqlite3-0, libxdo3, xdotool
           Maintainer: atopx <atopx@example.com>
           Homepage: https://github.com/atopx/CursorBarWatch
           Description: Real-time Cursor AI usage monitoring
