@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["atopx <3940422@qq.com>"]
 description = "Cursor AI usage monitoring"
 license = "MIT"
+license-file = "LICENSE"
 repository = "https://github.com/atopx/CursorBar"
 
 [dependencies]
