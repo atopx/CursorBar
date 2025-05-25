@@ -1,10 +1,12 @@
 use anyhow::Context;
 use anyhow::Result;
-use base64::URL_SAFE_NO_PAD;
-use base64::decode_config;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use retry::{OperationResult, delay::Fixed, retry};
 use serde::Deserialize;
 use serde::Serialize;
-use retry::{delay::Fixed, retry, OperationResult};
+use ureq::typestate::WithoutBody;
+use ureq::RequestBuilder;
 use std::time::Duration;
 
 use crate::config::UsageData;
@@ -42,10 +44,8 @@ pub struct CursorClient {
 
 impl CursorClient {
     pub fn new() -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_read(Duration::from_secs(5))
-            .timeout_write(Duration::from_secs(5))
-            .build();
+        let config = ureq::Agent::config_builder().timeout_connect(Some(Duration::from_secs(5))).build();
+        let agent = ureq::Agent::new_with_config(config);
         CursorClient { token: None, user_id: None, agent }
     }
 
@@ -67,16 +67,11 @@ impl CursorClient {
 
             // 解码JWT负载
             let payload_part = parts[1];
-            let padding_needed = (4 - payload_part.len() % 4) % 4;
-            let payload_padded = format!("{}{}", payload_part, "=".repeat(padding_needed));
-
-            let decoded = decode_config(&payload_padded, URL_SAFE_NO_PAD).context("Failed to decode JWT")?;
+            let decoded = URL_SAFE_NO_PAD.decode(payload_part).context("Failed to decode JWT")?;
             let payload: JwtPayload = serde_json::from_slice(&decoded).context("Failed to parse JWT payload")?;
 
             let user_id = if payload.sub.contains('|') {
-                payload.sub.split('|').nth(1)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid JWT subject format"))?
-                    .to_string()
+                payload.sub.split('|').nth(1).ok_or_else(|| anyhow::anyhow!("Invalid JWT subject format"))?.to_string()
             } else {
                 payload.sub
             };
@@ -95,49 +90,50 @@ impl CursorClient {
         }
     }
 
-    fn set_common_headers(&self, request: ureq::Request) -> ureq::Request {
+    fn set_common_headers(&self, request: RequestBuilder<WithoutBody>) -> RequestBuilder<WithoutBody> {
+        // request.header(key, value)
         request
-            .set("Accept", "*/*")
-            .set(
+            .header("Accept", "*/*")
+            .header(
                 "Accept-Language",
                 "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7,en-GB;q=0.6",
             )
-            .set("Cache-Control", "no-cache")
-            .set("Connection", "keep-alive")
-            .set("Pragma", "no-cache")
-            .set("Referer", "https://www.cursor.com/settings")
-            .set(
+            .header("Cache-Control", "no-cache")
+            .header("Connection", "keep-alive")
+            .header("Pragma", "no-cache")
+            .header("Referer", "https://www.cursor.com/settings")
+            .header(
                 "User-Agent",
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
             )
-            .set(
+            .header(
                 "sec-ch-ua",
                 "\"Chromium\";v=\"116\", \"Not)A;Brand\";v=\"24\", \"Google Chrome\";v=\"116\"",
             )
-            .set("sec-ch-ua-mobile", "?0")
-            .set("sec-ch-ua-platform", "\"macOS\"")
-            .set("Sec-Fetch-Dest", "empty")
-            .set("Sec-Fetch-Mode", "cors")
-            .set("Sec-Fetch-Site", "same-origin")
+            .header("sec-ch-ua-mobile", "?0")
+            .header("sec-ch-ua-platform", "\"macOS\"")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Site", "same-origin")
     }
 
     fn get_user_info(&self) -> Result<Option<UserInfo>> {
         if let Some(cookie) = self.build_cookie() {
             let url = "https://www.cursor.com/api/auth/me";
             let cookie_clone = cookie.clone();
-            
+
             let result = retry(Fixed::from_millis(500).take(2), || {
-                let request = self.agent.get(url);
+                let request: ureq::RequestBuilder<ureq::typestate::WithoutBody> = self.agent.get(url);
                 let request = self.set_common_headers(request);
-                match request.set("Cookie", &cookie_clone).call() {
+                match request.header("Cookie", &cookie_clone).call() {
                     Ok(response) => OperationResult::Ok(response),
                     Err(e) => OperationResult::Retry(anyhow::anyhow!("Request failed: {}", e)),
                 }
             });
 
             match result {
-                Ok(response) if response.status() == 200 => {
-                    let user_info: UserInfo = response.into_json()?;
+                Ok(mut response) if response.status() == 200 => {
+                    let user_info: UserInfo = response.body_mut().read_json()?;
                     return Ok(Some(user_info));
                 }
                 Ok(_) => return Ok(None),
@@ -151,19 +147,19 @@ impl CursorClient {
         if let Some(cookie) = self.build_cookie() {
             let url = "https://www.cursor.com/api/usage";
             let cookie_clone = cookie.clone();
-            
+
             let result = retry(Fixed::from_millis(500).take(2), || {
                 let request = self.agent.get(url);
                 let request = self.set_common_headers(request);
-                match request.set("Cookie", &cookie_clone).call() {
+                match request.header("Cookie", &cookie_clone).call() {
                     Ok(response) => OperationResult::Ok(response),
                     Err(e) => OperationResult::Retry(anyhow::anyhow!("Request failed: {}", e)),
                 }
             });
 
             match result {
-                Ok(response) if response.status() == 200 => {
-                    let usage: ApiUsageResponse = response.into_json()?;
+                Ok(mut response) if response.status() == 200 => {
+                    let usage: ApiUsageResponse = response.body_mut().read_json()?;
                     return Ok(usage.gpt4);
                 }
                 Ok(_) => return Ok(None),
