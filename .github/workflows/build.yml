@@ -167,14 +167,11 @@ jobs:
       - name: 创建Windows安装包
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          $VERSION_NUM = $env:GITHUB_REF.Replace('refs/tags/v', '')
+          $VERSION_NUM = "${{ github.ref_name }}".Replace('v', '')
           
           # 初始化 WiX 配置文件
           cargo wix init
 
-          # 替换 wix\main.wxs 文件中的版本号和图标
-          (Get-Content wix\main.wxs) -replace '1.0.0', $VERSION_NUM | Set-Content wix\main.wxs
-          
           # 复制图标到wix目录
           copy icon\windows\icon.ico wix\
 
@@ -182,7 +179,7 @@ jobs:
           cargo wix --output target\wix\CursorBar-windows.msi
           
           # 创建便携版
-          mkdir -p release-win
+          New-Item -Path release-win -ItemType Directory -Force
           copy target\release\cursor_bar.exe release-win\cursor_bar.exe
           copy icon\windows\icon.ico release-win\icon.ico
           Compress-Archive -Path release-win\* -DestinationPath CursorBar-windows.zip
@@ -208,7 +205,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfuse2 libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev \
-            dpkg-dev fakeroot upx-ucl libxdo-dev xdotool
+            dpkg-dev fakeroot upx-ucl libxdo-dev xdotool appstream
 
       - name: 安装Rust
         uses: dtolnay/rust-toolchain@stable
@@ -232,7 +229,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION_NUM="${VERSION#v}"
-          PACKAGE_NAME="cursorbarwatch_${VERSION_NUM}_amd64"
+          PACKAGE_NAME="CursorBar_${VERSION_NUM}_amd64"
 
           # 创建包结构
           mkdir -p "$PACKAGE_NAME/DEBIAN"
@@ -242,24 +239,24 @@ jobs:
           mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps"
           mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps"
           mkdir -p "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps"
-          mkdir -p "$PACKAGE_NAME/usr/share/doc/cursorbarwatch"
+          mkdir -p "$PACKAGE_NAME/usr/share/doc/cursorbar"
 
           # 复制二进制文件和图标
           cp target/release/cursor_bar "$PACKAGE_NAME/usr/bin/"
-          cp icon/linux/256x256.png "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbarwatch.png"
-          cp icon/linux/128x128.png "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbarwatch.png"
-          cp icon/linux/64x64.png "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbarwatch.png"
-          cp icon/linux/32x32.png "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbarwatch.png"
+          cp icon/linux/256x256.png "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbar.png"
+          cp icon/linux/128x128.png "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbar.png"
+          cp icon/linux/64x64.png "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbar.png"
+          cp icon/linux/32x32.png "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbar.png"
 
           # 创建控制文件
           cat > "$PACKAGE_NAME/DEBIAN/control" << EOF
-          Package: cursorbarwatch
+          Package: cursorbar
           Version: ${VERSION_NUM}
           Section: utils
           Priority: optional
           Architecture: amd64
           Depends: libgtk-3-0, libwebkit2gtk-4.0-37, libappindicator3-1, libc6, libxdo3, xdotool
-          Maintainer: atopx <atopx@example.com>
+          Maintainer: atopx <3940422@qq.com>
           Homepage: https://github.com/atopx/CursorBar
           Description: Real-time Cursor AI usage monitoring
            A modern, cross-platform system tray application for monitoring
@@ -272,7 +269,7 @@ jobs:
           Name=CursorBar
           Comment=Cursor AI usage monitoring
           Exec=/usr/bin/cursor_bar
-          Icon=cursorbarwatch
+          Icon=cursorbar
           Terminal=false
           Type=Application
           Categories=Utility;System;Monitor;
@@ -285,10 +282,10 @@ jobs:
           # 设置权限
           chmod 755 "$PACKAGE_NAME/usr/bin/cursor_bar"
           chmod 644 "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop"
-          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbarwatch.png"
-          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbarwatch.png"
-          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbarwatch.png"
-          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbarwatch.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbar.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/128x128/apps/cursorbar.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/64x64/apps/cursorbar.png"
+          chmod 644 "$PACKAGE_NAME/usr/share/icons/hicolor/32x32/apps/cursorbar.png"
 
           # 构建DEB包
           fakeroot dpkg-deb --build "$PACKAGE_NAME"
@@ -301,6 +298,7 @@ jobs:
           cp target/release/cursor_bar AppDir/usr/bin/
           cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/
           cp "$PACKAGE_NAME/usr/share/applications/CursorBar.desktop" AppDir/usr/share/applications/
+          cp "$PACKAGE_NAME/usr/share/icons/hicolor/256x256/apps/cursorbar.png" AppDir/usr/share/icons/hicolor/256x256/apps/cursorbar.png
 
           # 创建AppRun文件
           cat > AppDir/AppRun << EOF

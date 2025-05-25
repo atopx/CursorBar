@@ -2,6 +2,10 @@
 name = "cursor_bar"
 version = "0.1.0"
 edition = "2024"
+authors = ["atopx <3940422@qq.com>"]
+description = "Cursor AI usage monitoring"
+license = "MIT"
+repository = "https://github.com/atopx/CursorBar"
 
 [dependencies]
 ureq = { version = "3.0.11", features = ["json"] }
@@ -33,3 +37,30 @@ lto = true
 codegen-units = 1
 panic = 'abort'
 strip = true
+
+[package.metadata.bundle]
+name = "CursorBar"
+identifier = "io.github.atopx.cursorbar"
+icon = [
+    "icon/linux/32x32.png",
+    "icon/linux/64x64.png",
+    "icon/linux/128x128.png",
+    "icon/linux/256x256.png",
+]
+copyright = "Copyright (c) atopx 2025. All rights reserved."
+category = "Utility"
+short_description = "一个用于去除PDF权限限制的工具"
+long_description = """
+一个简单易用的工具，可以去除PDF文档的复制/编辑/打印等权限限制。
+使用FLTK图形界面，轻量级、高性能。
+"""
+
+[package.metadata.bundle.windows]
+icon = ["icon/windows/icon.ico"]
+
+[package.metadata.wix]
+name = "CursorBar"
+license = false
+manufacturer = "atopx"
+product-name = "CursorBar"
+product-icon = "icon/windows/icon.ico"
