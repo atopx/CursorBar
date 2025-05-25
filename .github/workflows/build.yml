@@ -1,0 +1,365 @@
+name: 多平台构建
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # macOS 构建
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 安装Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: rustfmt, clippy
+
+      - name: 运行测试
+        run: |
+          cargo test --verbose
+          cargo clippy -- -D warnings
+          cargo fmt -- --check
+
+      - name: 构建macOS (x86_64)
+        run: |
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: 构建macOS (Apple Silicon)
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+
+      - name: 创建应用包
+        run: |
+          # x86_64
+          APP_NAME="CursorBar-x86_64.app"
+          mkdir -p "$APP_NAME/Contents/MacOS"
+          mkdir -p "$APP_NAME/Contents/Resources"
+          cp target/x86_64-apple-darwin/release/cursor_bar "$APP_NAME/Contents/MacOS/"
+
+          # 创建Info.plist
+          cat > "$APP_NAME/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>cursor_bar</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.atopx.cursorbar</string>
+              <key>CFBundleName</key>
+              <string>CursorBar</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSRequiresAquaSystemAppearance</key>
+              <false/>
+              <key>NSAppTransportSecurity</key>
+              <dict>
+                  <key>NSAllowsArbitraryLoads</key>
+                  <true/>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+          # arm64
+          APP_NAME="CursorBar-arm64.app"
+          mkdir -p "$APP_NAME/Contents/MacOS"
+          mkdir -p "$APP_NAME/Contents/Resources"
+          cp target/aarch64-apple-darwin/release/cursor_bar "$APP_NAME/Contents/MacOS/"
+
+          # 创建Info.plist
+          cat > "$APP_NAME/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>cursor_bar</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.atopx.cursorbar</string>
+              <key>CFBundleName</key>
+              <string>CursorBar</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+              <key>NSRequiresAquaSystemAppearance</key>
+              <false/>
+              <key>NSAppTransportSecurity</key>
+              <dict>
+                  <key>NSAllowsArbitraryLoads</key>
+                  <true/>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: 打包发布文件
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # x86_64
+          mkdir -p dmg-temp-x86_64
+          cp -R "CursorBar-x86_64.app" dmg-temp-x86_64/
+          ln -s /Applications dmg-temp-x86_64/Applications
+          hdiutil create -volname "CursorBar x86_64" -srcfolder dmg-temp-x86_64 -ov -format UDZO "CursorBarWatch-macos-x86_64.dmg"
+
+          # arm64
+          mkdir -p dmg-temp-arm64
+          cp -R "CursorBar-arm64.app" dmg-temp-arm64/
+          ln -s /Applications dmg-temp-arm64/Applications
+          hdiutil create -volname "CursorBar arm64" -srcfolder dmg-temp-arm64 -ov -format UDZO "CursorBarWatch-macos-arm64.dmg"
+
+      - name: 上传构建产物
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds
+          path: |
+            CursorBarWatch-macos-x86_64.dmg
+            CursorBarWatch-macos-arm64.dmg
+
+  # Windows 构建
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 安装Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: 安装依赖
+        run: |
+          choco install -y upx
+          choco install -y wixtoolset
+
+      - name: 运行测试
+        run: |
+          cargo test --verbose
+          cargo clippy -- -D warnings
+          cargo fmt -- --check
+
+      - name: 构建Windows
+        run: |
+          cargo build --release
+          upx --best --lzma target\release\cursor_bar.exe
+
+      - name: 创建安装包
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # 创建简单压缩包
+          mkdir -p CursorBarWatch-windows
+          copy target\release\cursor_bar.exe CursorBarWatch-windows\
+
+          # 创建WiX安装包
+          $VERSION_NUM = $env:GITHUB_REF.Replace('refs/tags/v', '')
+
+          @"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="CursorBar" Language="1033" Version="$VERSION_NUM.0" Manufacturer="atopx" UpgradeCode="12345678-1234-1234-1234-123456789012">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+              <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+
+              <Feature Id="ProductFeature" Title="CursorBar" Level="1">
+                <ComponentGroupRef Id="ProductComponents" />
+              </Feature>
+
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFilesFolder">
+                  <Directory Id="INSTALLFOLDER" Name="CursorBar" />
+                </Directory>
+                <Directory Id="ProgramMenuFolder">
+                  <Directory Id="ApplicationProgramsFolder" Name="CursorBar"/>
+                </Directory>
+                <Directory Id="StartupFolder" />
+              </Directory>
+
+              <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+                <Component Id="MainExecutable" Guid="*">
+                  <File Id="CursorBarExe" Source="target\release\cursor_bar.exe" KeyPath="yes">
+                    <Shortcut Id="ApplicationStartMenuShortcut" Directory="ApplicationProgramsFolder" Name="CursorBar" WorkingDirectory="INSTALLFOLDER" Icon="CursorBar.exe" IconIndex="0" Advertise="yes" />
+                    <Shortcut Id="ApplicationStartupShortcut" Directory="StartupFolder" Name="CursorBar" WorkingDirectory="INSTALLFOLDER" Arguments="" />
+                  </File>
+                </Component>
+              </ComponentGroup>
+
+              <Icon Id="CursorBar.exe" SourceFile="target\release\cursor_bar.exe" />
+              <Property Id="ARPPRODUCTICON" Value="CursorBar.exe" />
+              <Property Id="ARPURLINFOABOUT" Value="https://github.com/atopx/CursorBarWatch" />
+            </Product>
+          </Wix>
+          "@ | Out-File -Encoding utf8 installer.wxs
+
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" installer.wxs
+          & "C:\Program Files (x86)\WiX Toolset v3.11\bin\light.exe" installer.wixobj -out "CursorBarWatch-windows.msi"
+
+          Compress-Archive -Path CursorBarWatch-windows\* -DestinationPath CursorBarWatch-windows.zip
+
+      - name: 上传构建产物
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            CursorBarWatch-windows.zip
+            CursorBarWatch-windows.msi
+
+  # Linux 构建
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev
+          sudo apt-get install -y dpkg-dev fakeroot upx-ucl
+
+      - name: 安装Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: 运行测试
+        run: |
+          cargo test --verbose
+          cargo clippy -- -D warnings
+          cargo fmt -- --check
+
+      - name: 构建Linux
+        run: |
+          cargo build --release
+          upx --best --lzma target/release/cursor_bar
+
+      - name: 创建Deb包
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${{ github.ref_name }}"
+          PACKAGE_NAME="cursorbarwatch_${VERSION}_amd64"
+
+          # 创建包结构
+          mkdir -p "$PACKAGE_NAME/DEBIAN"
+          mkdir -p "$PACKAGE_NAME/usr/bin"
+          mkdir -p "$PACKAGE_NAME/usr/share/applications"
+          mkdir -p "$PACKAGE_NAME/usr/share/doc/cursorbarwatch"
+
+          # 复制二进制文件
+          cp target/release/cursor_bar "$PACKAGE_NAME/usr/bin/"
+
+          # 创建控制文件
+          cat > "$PACKAGE_NAME/DEBIAN/control" << EOF
+          Package: cursorbarwatch
+          Version: ${VERSION#v}
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Depends: libgtk-3-0, libwebkit2gtk-4.0-37, libappindicator3-1, libc6
+          Maintainer: atopx <atopx@example.com>
+          Homepage: https://github.com/atopx/CursorBarWatch
+          Description: Real-time Cursor AI usage monitoring
+           A modern, cross-platform system tray application for monitoring
+           Cursor AI usage metrics in real-time.
+          EOF
+
+          # 创建desktop文件
+          cat > "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" << EOF
+          [Desktop Entry]
+          Name=CursorBar
+          Comment=Cursor AI usage monitoring
+          Exec=/usr/bin/cursor_bar
+          Terminal=false
+          Type=Application
+          Categories=Utility;System;Monitor;
+          StartupNotify=false
+          NoDisplay=true
+          X-GNOME-Autostart-enabled=true
+          Keywords=cursor;ai;usage;monitor;tray;
+          EOF
+
+          # 设置权限
+          chmod 755 "$PACKAGE_NAME/usr/bin/cursor_bar"
+          chmod 644 "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop"
+
+          # 构建DEB包
+          fakeroot dpkg-deb --build "$PACKAGE_NAME"
+
+          # 创建AppImage
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          cp target/release/cursor_bar AppDir/usr/bin/
+          cp "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" AppDir/
+          cp "$PACKAGE_NAME/usr/share/applications/cursorbarwatch.desktop" AppDir/usr/share/applications/
+
+          # 创建AppRun文件
+          cat > AppDir/AppRun << EOF
+          #!/bin/bash
+          HERE="\$(dirname "\$(readlink -f "\${0}")")"
+          export PATH="\${HERE}/usr/bin/:\${PATH}"
+          exec "\${HERE}/usr/bin/cursor_bar" "\$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # 下载AppImage工具
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          # 创建AppImage
+          ./appimagetool-x86_64.AppImage AppDir CursorBarWatch-linux.AppImage
+
+      - name: 上传构建产物
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            CursorBarWatch-linux.AppImage
+            cursorbarwatch_*.deb
+
+  # 创建发布版本
+  create-release:
+    needs: [build-macos, build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+
+      - name: 创建发布版本
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            macos-builds/CursorBarWatch-macos-x86_64.dmg
+            macos-builds/CursorBarWatch-macos-arm64.dmg
+            windows-builds/CursorBarWatch-windows.zip
+            windows-builds/CursorBarWatch-windows.msi
+            linux-builds/CursorBarWatch-linux.AppImage
+            linux-builds/*.deb
+          draft: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
