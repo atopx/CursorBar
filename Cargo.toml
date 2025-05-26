@@ -14,7 +14,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 chrono = "0.4"
-rusqlite = { version = "0.35", features = ["bundled"] }
+rusqlite = { version = "0.36", features = ["bundled"] }
 base64 = "0.22"
 dirs = "6.0"
 open = "5.3.2"
