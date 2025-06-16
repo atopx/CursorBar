@@ -9,7 +9,7 @@ license-file = "LICENSE"
 repository = "https://github.com/atopx/CursorBar"
 
 [dependencies]
-ureq = { version = "3.0.11", features = ["json"] }
+ureq = { version = "3.0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
