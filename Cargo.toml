@@ -20,7 +20,7 @@ dirs = "6.0"
 open = "5.3.2"
 tray-icon = "0.20.1"
 image = "0.25.6"
-tao = "0.33.0"
+tao = "0.34.0"
 parking_lot = "0.12"
 retry = "2.0"
 
